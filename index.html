@@ -1,268 +1,407 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="ko" class="h-full">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>민채의 금융 대시보드</title>
+
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          boxShadow: {
+            soft: '0 10px 30px rgba(0,0,0,0.06)'
+          }
+        }
+      },
+      darkMode: 'class'
+    }
+  </script>
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <style>
-    body { font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif; background-color: #f3f4f6; }
-    .card-details { transition: max-height .3s ease-in-out, opacity .3s ease-in-out; max-height: 0; overflow: hidden; opacity: 0; }
-    .card-details.visible { max-height: 240px; opacity: 1; }
-    @media (min-width: 768px) { .main-container { max-width: 100%; width: 100%; min-height: 100vh; padding: 2rem 4rem; border-radius: 0; } }
-    /* 차트 영역이 반응형으로 충분한 높이를 가지도록 */
-    #chart-wrap { height: 440px; }
+    body { font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif; }
+    .card-details { transition: max-height .3s ease, opacity .3s ease; max-height: 0; overflow: hidden; opacity: 0; }
+    .card-details.visible { max-height: 260px; opacity: 1; }
+    .skeleton { background: linear-gradient(90deg, rgba(0,0,0,0.06), rgba(0,0,0,0.12), rgba(0,0,0,0.06)); background-size: 200% 100%; animation: shimmer 1.2s infinite; }
+    @keyframes shimmer { from { background-position: 200% 0;} to { background-position: -200% 0;} }
+    @media (min-width: 1024px) { .main-container { min-height: 100vh; } }
   </style>
 </head>
-<body class="p-4 sm:p-8 md:p-12 lg:p-16">
-  <div class="main-container max-w-full md:max-w-6xl mx-auto bg-white p-6 md:p-10 rounded-3xl shadow-xl">
-    <!-- Header -->
-    <header class="mb-8 md:mb-12 text-center relative">
-      <h1 class="text-4xl font-bold text-gray-800 mb-2">민채의 투자 현황</h1>
-      <p class="text-gray-500">실시간 포트폴리오 현황</p>
-      <button id="fullscreen-button" class="absolute top-0 right-0 mt-2 mr-2 bg-gray-200 text-gray-600 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-gray-300 transition-colors">전체 화면</button>
-    </header>
+<body class="h-full bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100">
+  <div class="main-container mx-auto max-w-7xl p-4 sm:p-6 lg:p-10">
+    <!-- Top Bar -->
+    <div class="flex items-center gap-3 mb-6">
+      <div class="flex items-center gap-3">
+        <div class="w-11 h-11 rounded-2xl bg-indigo-600 text-white grid place-items-center shadow-soft">M</div>
+        <div>
+          <h1 class="text-2xl sm:text-3xl font-extrabold">민채의 투자 대시보드</h1>
+          <p id="last-updated" class="text-xs text-slate-500 dark:text-slate-400">최근 업데이트: —</p>
+        </div>
+      </div>
+      <div class="ml-auto flex items-center gap-2">
+        <button id="refreshBtn" class="px-3 py-2 rounded-xl text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/70 shadow-soft">새로고침</button>
+        <button id="toggleTheme" class="px-3 py-2 rounded-xl text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/70 shadow-soft" title="라이트/다크 전환">🌗</button>
+        <button id="fullscreen-button" class="px-3 py-2 rounded-xl text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/70 shadow-soft" title="전체 화면">⛶</button>
+      </div>
+    </div>
+
+    <!-- Status / Alerts -->
+    <div id="status-banner" class="hidden mb-4 rounded-2xl border border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-200 px-4 py-3 text-sm">데이터를 불러오는 중입니다…</div>
 
     <!-- KPI Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 md:mb-12">
-      <div class="bg-indigo-600 text-white p-6 rounded-2xl shadow-lg transform transition-transform hover:scale-105">
-        <p class="text-sm font-semibold/none opacity-80">총 포트폴리오 평가액</p>
-        <p id="total-value" class="text-3xl font-extrabold mt-2">₩0</p>
+    <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+      <div class="kpi bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-soft border border-slate-100 dark:border-slate-800">
+        <div class="text-sm text-slate-500 dark:text-slate-400">총 평가액</div>
+        <div id="kpi-total" class="text-3xl font-extrabold mt-1 tracking-tight">₩0</div>
+        <div id="kpi-total-mm" class="text-xs text-slate-500 mt-1">₩0.00 MM</div>
       </div>
-      <div class="bg-gray-800 text-white p-6 rounded-2xl shadow-lg transform transition-transform hover:scale-105">
-        <p class="text-sm font-semibold/none opacity-80">총 손익</p>
-        <p id="total-profit-loss" class="text-3xl font-extrabold mt-2">₩0</p>
+      <div class="kpi bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-soft border border-slate-100 dark:border-slate-800">
+        <div class="text-sm text-slate-500 dark:text-slate-400">총 손익</div>
+        <div id="kpi-pl" class="text-3xl font-extrabold mt-1 tracking-tight">₩0</div>
+        <div id="kpi-pl-rate" class="text-xs mt-1">—</div>
       </div>
-    </div>
+      <div class="kpi bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-soft border border-slate-100 dark:border-slate-800">
+        <div class="text-sm text-slate-500 dark:text-slate-400">현금</div>
+        <div id="kpi-cash" class="text-3xl font-extrabold mt-1 tracking-tight">₩0</div>
+        <div class="text-xs text-slate-500 mt-1">안전 자산</div>
+      </div>
+      <div class="kpi bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-soft border border-slate-100 dark:border-slate-800">
+        <div class="text-sm text-slate-500 dark:text-slate-400">보유 자산 수</div>
+        <div id="kpi-count" class="text-3xl font-extrabold mt-1 tracking-tight">0</div>
+        <div class="text-xs text-slate-500 mt-1">펀드 + 현금</div>
+      </div>
+    </section>
+
+    <!-- Charts Row -->
+    <section class="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
+      <!-- Allocation Donut -->
+      <div class="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-soft border border-slate-100 dark:border-slate-800">
+        <h2 class="text-lg font-bold mb-4">자산 배분</h2>
+        <div class="h-[320px]"><canvas id="donut"></canvas></div>
+      </div>
+      <!-- P/L by Asset -->
+      <div class="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-soft border border-slate-100 dark:border-slate-800">
+        <h2 class="text-lg font-bold mb-4">자산별 손익</h2>
+        <div class="h-[320px]"><canvas id="bars"></canvas></div>
+      </div>
+      <!-- Portfolio Over Time (if 날짜 열 존재) -->
+      <div class="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-soft border border-slate-100 dark:border-slate-800">
+        <div class="flex items-center gap-2 mb-4">
+          <h2 class="text-lg font-bold">포트폴리오 추이</h2>
+          <span id="timeline-badge" class="ml-2 text-[10px] px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700 text-slate-500">날짜 데이터 탐지 안 됨</span>
+        </div>
+        <div class="h-[320px]"><canvas id="line"></canvas></div>
+      </div>
+    </section>
 
     <!-- Holdings -->
-    <section>
-      <h2 class="text-2xl font-semibold text-gray-800 mb-4">보유 자산</h2>
-      <div id="holdings-container" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
-    </section>
-
-    <!-- Chart -->
-    <section class="mt-8 md:mt-12">
-      <h2 class="text-2xl font-semibold text-gray-800 mb-4 text-center">자산별 투자 성과</h2>
-      <div id="chart-wrap" class="bg-white p-6 rounded-2xl shadow-lg">
-        <canvas id="investment-chart"></canvas>
+    <section class="mb-10">
+      <div class="flex items-end justify-between mb-3">
+        <h2 class="text-xl font-extrabold">보유 자산</h2>
+        <div class="text-xs text-slate-500">카드를 탭하면 상세가 펼쳐집니다</div>
       </div>
+      <div id="holdings" class="grid grid-cols-1 md:grid-cols-2 gap-5"></div>
     </section>
 
-    <!-- Cash -->
-    <div class="bg-blue-100 p-6 rounded-2xl shadow-inner mt-6">
-      <h3 class="text-xl font-bold text-gray-700">현금 자산</h3>
-      <p id="cash-value" class="text-3xl font-extrabold mt-2 text-blue-700">₩0</p>
-    </div>
-
-    <!-- Status -->
-    <div id="status-message" class="text-center mt-8 text-gray-500">데이터를 불러오는 중입니다...</div>
+    <!-- Footer -->
+    <footer class="text-center text-xs text-slate-500 pb-8 opacity-80">© for Minchae · GitHub Pages & Google Sheets 연동</footer>
   </div>
 
   <script>
-    // ====== CONFIG ======
-    // Google Sheets: 파일 > 웹에 게시 > 링크 복사(쉼표로 구분된 값)
-    const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQnDFQqH68Ig8YVehCQj7yfKGIea3OX3L2RlQ8cDGITWE-gKZ0ksp_w5phw0SjD34xS7nLC2mqa0_3T/pub?gid=1919078711&single=true&output=csv";
-    // 새 데이터 폴링 주기(ms)
+    // ===================== CONFIG =====================
+    const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQnDFQqH68Ig8YVehCQj7yfKGIea3OX3L2RlQ8cDGITWE-gKZ0ksp_w5phw0SjD34xS7nLC2mqa0_3T/pub?gid=1919078711&single=true&output=csv"; // 공개 CSV
     const REFRESH_MS = 5 * 60 * 1000; // 5분
 
-    // ====== DATA ======
+    // 투자 자산 정의 (수량은 1/1000 보정 포함하여 실제 단위로 넣어도 됨)
     const investments = [
       { name: '글로벌 우주기술 & 방산 (주식)', fund_cd: 'K55101E11251', quantity: 5_732_516, purchasePrice: 1855, currentPrice: 0 },
       { name: '로보테크(주식)', fund_cd: 'K55207BV6083', quantity: 5_788_866, purchasePrice: 1727, currentPrice: 0 },
       { name: '전략 배분 TDF(주식)', fund_cd: 'K55301BM7905', quantity: 8_482_880, purchasePrice: 1179, currentPrice: 0 }
     ];
-    // 보유 현금(원)
-    const cash = 503_107;
+    const cash = 503_107; // 원화 현금
 
-    // ====== HELPERS ======
-    const statusEl = document.getElementById('status-message');
+    // ===================== HELPERS =====================
+    const $ = (sel) => document.querySelector(sel);
+    const SAFE_CSV_SPLIT = /,(?=(?:[^"]*"[^"]*")*[^"]*$)/;
+    const nf = new Intl.NumberFormat('ko-KR');
+    const nfc = new Intl.NumberFormat('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const won = (n) => `₩${nf.format(Math.round(n||0))}`;
+    const toMM = (n) => `₩${nfc.format((n||0)/1_000_000)} MM`;
 
-    // ₩ 백만(MM) 단위 표기
-    function formatToMM(num) {
-      if (!isFinite(num)) return '₩0.00 MM';
-      const mm = num / 1_000_000; // 1,000,000원 = 1.00 MM
-      return `₩${mm.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MM`;
+    function showBanner(msg, tone='info') {
+      const el = $('#status-banner');
+      el.textContent = msg;
+      el.classList.remove('hidden');
+      el.classList.toggle('border-amber-200', tone==='info');
+      el.classList.toggle('bg-amber-50', tone==='info');
+      el.classList.toggle('text-amber-800', tone==='info');
+      el.classList.toggle('border-red-200', tone==='error');
+      el.classList.toggle('bg-red-50', tone==='error');
+      el.classList.toggle('text-red-700', tone==='error');
+      if (tone!=='info') setTimeout(()=> el.classList.add('hidden'), 3500);
     }
-    function formatWon(num) { return `₩${Number(num || 0).toLocaleString('ko-KR')}`; }
+    function hideBanner(){ $('#status-banner').classList.add('hidden'); }
 
-    // 안전한 CSV split (따옴표 내부 콤마 무시)
-    const SAFE_CSV_SPLIT = /,(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)/;
+    function setLastUpdated(){ $('#last-updated').textContent = `최근 업데이트: ${new Date().toLocaleString('ko-KR')}`; }
 
-    // ====== FETCH & PARSE ======
+    // ===================== FETCH & PARSE =====================
     async function fetchSheet() {
-      showStatus('데이터를 불러오는 중입니다...', false);
+      showBanner('데이터를 불러오는 중입니다…', 'info');
       try {
         const res = await fetch(CSV_URL, { cache: 'no-store' });
-        if (!res.ok) throw new Error(`네트워크 오류: ${res.status} ${res.statusText}`);
+        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
         const text = await res.text();
         const rows = text.trim().split(/\r?\n/);
-        if (rows.length <= 1) throw new Error('스프레드시트에 데이터가 없거나 형식이 올바르지 않습니다.');
+        if (rows.length <= 1) throw new Error('시트에 데이터가 없거나 형식이 올바르지 않습니다');
 
-        // 최근 행들 중에서 각 펀드코드별 최신가 선택
-        const lookback = 15; // 최근 15행까지 검사(안전)
-        const recent = rows.slice(-Math.min(lookback, rows.length - 1));
+        const header = rows[0].split(SAFE_CSV_SPLIT).map(s => s.replaceAll('"','').trim());
+        const idx = {
+          price: header.findIndex(h => /base|기준가|price/i.test(h)),
+          code:  header.findIndex(h => /fund.?code|코드|code/i.test(h)),
+          date:  header.findIndex(h => /date|날짜|기준일/i.test(h))
+        };
+        if (idx.price < 0) idx.price = 4; // 폴백
+        if (idx.code  < 0) idx.code  = 0; // 폴백
 
-        // 헤더 추정: 첫 행
-        const header = rows[0].split(SAFE_CSV_SPLIT).map(s => s.replaceAll('"', '').trim());
-        // 기준가 열 인덱스(헤더에 Base, 기준가 등 포함 단어 탐색)
-        const priceIdx = header.findIndex(h => /base|기준가|price/i.test(h));
-        const codeIdx  = header.findIndex(h => /fund.?code|코드|code/i.test(h));
-        // 헤더가 없거나 찾지 못하면 기본 인덱스(코드=0, 가격=4)에 폴백
-        const pIdx = priceIdx >= 0 ? priceIdx : 4;
-        const cIdx = codeIdx  >= 0 ? codeIdx  : 0;
+        // 최신가 결정 & (가능하면) 날짜별 가격 맵 구성
+        const recentRows = rows.slice(1).slice(-200); // 최근 N행만 확인
+        const latestByCode = new Map();
+        const timeline = new Map(); // date -> Map(code -> price)
 
-        // 업데이트
-        for (const inv of investments) {
-          const row = [...recent].reverse().find(r => r.includes(inv.fund_cd));
-          if (row) {
-            const cols = row.split(SAFE_CSV_SPLIT).map(s => s.replaceAll('"', '').trim());
-            const raw = cols[pIdx];
-            const val = Number(raw?.replace(/[^0-9.\-]/g, ''));
-            if (isFinite(val)) {
-              inv.currentPrice = val;
+        for (const r of recentRows) {
+          const cols = r.split(SAFE_CSV_SPLIT).map(s => s.replaceAll('"','').trim());
+          const code = cols[idx.code];
+          const rawP = cols[idx.price];
+          const price = Number(String(rawP||'').replace(/[^0-9.\-]/g,''));
+          if (!code || !isFinite(price)) continue;
+
+          // 최신가 (뒤에서부터 오므로 덮어쓰지 않게 존재하지 않을 때만)
+          if (!latestByCode.has(code)) latestByCode.set(code, price);
+
+          if (idx.date >= 0) {
+            const d = cols[idx.date];
+            const dateKey = normalizeDate(d);
+            if (dateKey) {
+              if (!timeline.has(dateKey)) timeline.set(dateKey, new Map());
+              timeline.get(dateKey).set(code, price);
             }
           }
         }
 
-        renderAll();
-        hideStatus();
-      } catch (err) {
-        showStatus(`오류: ${err.message} — CSV URL과 공개 설정을 확인하세요.`, true);
-        console.error(err);
+        // 투자 배열 업데이트
+        for (const inv of investments) {
+          const p = latestByCode.get(inv.fund_cd);
+          if (isFinite(p)) inv.currentPrice = p; // 없으면 0 유지
+        }
+
+        renderAll(timeline);
+        setLastUpdated();
+        hideBanner();
+      } catch (e) {
+        console.error(e);
+        showBanner(`오류: ${e.message} — CSV 공개/헤더를 확인하세요.`, 'error');
       }
     }
 
-    function showStatus(msg, isError) {
-      statusEl.textContent = msg;
-      statusEl.style.color = isError ? '#dc2626' : '#6b7280';
-      statusEl.style.display = 'block';
+    function normalizeDate(v){
+      if (!v) return null;
+      // 허용: 2025-09-01, 2025/09/01, 2025.09.01, 09/01/2025, 2025-9-1, etc.
+      const t = v.replace(/[.]/g,'/').replace(/-/g,'/').trim();
+      const parts = t.split('/').map(x=>x.trim());
+      let y,m,d;
+      if (parts.length===3){
+        if (parts[0].length===4){ y=+parts[0]; m=+parts[1]; d=+parts[2]; }
+        else if (parts[2].length===4){ y=+parts[2]; m=+parts[0]; d=+parts[1]; }
+      }
+      if (!y||!m||!d) { const dt = new Date(v); if (!isNaN(dt)) { y=dt.getFullYear(); m=dt.getMonth()+1; d=dt.getDate(); } }
+      if (!y||!m||!d) return null;
+      return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     }
-    function hideStatus() { statusEl.style.display = 'none'; }
 
-    // ====== RENDER ======
-    function renderHoldings() {
-      const container = document.getElementById('holdings-container');
-      container.innerHTML = '';
+    // ===================== RENDER =====================
+    let donutChart, barsChart, lineChart;
 
-      let totalValue = cash;
-      let totalPL = 0;
+    function renderAll(timeline){
+      renderKPIs();
+      renderHoldings();
+      renderDonut();
+      renderBars();
+      renderLine(timeline);
+    }
 
-      for (const inv of investments) {
-        const qty = inv.quantity / 1000; // 1000배 표기 오류 보정
-        const currentValue = (inv.currentPrice || 0) * qty;
-        const profitLoss = ((inv.currentPrice || 0) - inv.purchasePrice) * qty;
-        totalValue += currentValue;
-        totalPL += profitLoss;
+    function calcTotals(){
+      let totalVal = cash;
+      let totalCost = cash; // 현금은 원가=가치 동일
+      for (const inv of investments){
+        const qty = inv.quantity / 1000; // 기존 보정과 동일
+        totalVal += (inv.currentPrice||0) * qty;
+        totalCost += inv.purchasePrice * qty;
+      }
+      return { totalVal, totalCost, totalPL: totalVal - totalCost };
+    }
 
-        const isGain = profitLoss >= 0;
+    function renderKPIs(){
+      const { totalVal, totalCost, totalPL } = calcTotals();
+      $('#kpi-total').textContent = won(totalVal);
+      $('#kpi-total-mm').textContent = toMM(totalVal);
+      $('#kpi-cash').textContent = won(cash);
+      $('#kpi-count').textContent = String(investments.length + 1);
+
+      const rate = totalCost>0 ? (totalPL/totalCost)*100 : 0;
+      const plEl = $('#kpi-pl');
+      plEl.textContent = `${totalPL>=0? '+':''}${won(Math.abs(totalPL))}`;
+      const rateEl = $('#kpi-pl-rate');
+      rateEl.textContent = `수익률 ${rate>=0?'+':''}${nfc.format(rate)}%`;
+      plEl.classList.toggle('text-emerald-600', totalPL>=0);
+      plEl.classList.toggle('text-rose-600', totalPL<0);
+    }
+
+    function renderHoldings(){
+      const wrap = $('#holdings');
+      wrap.innerHTML = '';
+      for (const inv of investments){
+        const qty = inv.quantity/1000;
+        const curVal = qty * (inv.currentPrice||0);
+        const cost   = qty * inv.purchasePrice;
+        const pl     = curVal - cost;
+        const gain   = pl >= 0;
         const card = document.createElement('div');
-        card.className = 'bg-gray-100 p-6 rounded-xl shadow-inner cursor-pointer transition-all duration-300 transform hover:scale-105';
+        card.className = 'bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-100 dark:border-slate-800 shadow-soft hover:shadow transition-all cursor-pointer';
         card.innerHTML = `
-          <h3 class="text-xl font-bold text-gray-700">${inv.name}</h3>
-          <div class="mt-4 grid grid-cols-2 gap-4 text-sm font-medium">
+          <div class="flex items-start justify-between gap-3">
             <div>
-              <p class="text-gray-500">현재 평가액</p>
-              <p class="font-bold text-gray-800">${formatToMM(currentValue)}</p>
+              <h3 class="text-lg font-bold">${inv.name}</h3>
+              <div class="text-xs text-slate-500">코드: ${inv.fund_cd}</div>
             </div>
-            <div>
-              <p class="text-gray-500">현재 손익</p>
-              <p class="font-bold ${isGain ? 'text-green-600' : 'text-red-600'}">${isGain ? '+' : ''}${formatToMM(Math.abs(profitLoss))}</p>
+            <div class="text-right">
+              <div class="text-sm text-slate-500">현재 평가액</div>
+              <div class="text-xl font-extrabold">${toMM(curVal)}</div>
             </div>
           </div>
-          <div class="card-details mt-4 text-sm font-medium">
-            <div class="grid grid-cols-2 gap-4">
+          <div class="card-details mt-4 text-sm">
+            <div class="grid grid-cols-2 gap-3">
               <div>
-                <p class="text-gray-500">수량</p>
-                <p class="font-bold text-gray-800">${qty.toLocaleString('ko-KR')}</p>
+                <div class="text-slate-500">수량</div>
+                <div class="font-semibold">${nf.format(qty)}</div>
               </div>
               <div>
-                <p class="text-gray-500">평단가</p>
-                <p class="font-bold text-gray-800">${formatWon(inv.purchasePrice)}</p>
+                <div class="text-slate-500">평단가</div>
+                <div class="font-semibold">${won(inv.purchasePrice)}</div>
               </div>
               <div>
-                <p class="text-gray-500">현재 기준가</p>
-                <p class="font-bold text-gray-800">${inv.currentPrice ? formatWon(inv.currentPrice) : '—'}</p>
+                <div class="text-slate-500">현재 기준가</div>
+                <div class="font-semibold">${inv.currentPrice? won(inv.currentPrice) : '—'}</div>
               </div>
               <div>
-                <p class="text-gray-500">펀드 코드</p>
-                <p class="font-bold text-gray-800">${inv.fund_cd}</p>
+                <div class="text-slate-500">현재 손익</div>
+                <div class="font-semibold ${gain? 'text-emerald-600':'text-rose-600'}">${gain?'+':''}${toMM(Math.abs(pl))}</div>
               </div>
             </div>
           </div>
         `;
-        // 토글 디테일
         card.addEventListener('click', () => card.querySelector('.card-details').classList.toggle('visible'));
-        container.appendChild(card);
+        wrap.appendChild(card);
       }
-
-      // KPI 업데이트
-      document.getElementById('total-value').textContent = formatToMM(totalValue);
-      const totalPLEl = document.getElementById('total-profit-loss');
-      totalPLEl.textContent = `${totalPL >= 0 ? '+' : ''}${formatToMM(Math.abs(totalPL))}`;
-      totalPLEl.parentElement.style.backgroundColor = totalPL >= 0 ? '#10B981' : '#EF4444';
-      document.getElementById('cash-value').textContent = formatToMM(cash);
     }
 
-    let chart;
-    function renderChart() {
-      const labels = investments.map(i => i.name);
-      const qtys = investments.map(i => i.quantity / 1000);
-      const initialValues = investments.map((i, idx) => Math.round(qtys[idx] * i.purchasePrice));
-      const currentValues = investments.map((i, idx) => Math.round(qtys[idx] * (i.currentPrice || 0)));
-
-      const ctx = document.getElementById('investment-chart').getContext('2d');
-      if (chart) chart.destroy();
-      chart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels,
-          datasets: [
-            { label: '초기 투자금', data: initialValues, backgroundColor: 'rgba(59,130,246,0.8)', borderColor: 'rgba(59,130,246,1)', borderWidth: 1 },
-            { label: '현재 가치', data: currentValues, backgroundColor: 'rgba(16,185,129,0.8)', borderColor: 'rgba(16,185,129,1)', borderWidth: 1 }
-          ]
-        },
+    function renderDonut(){
+      const labels = [...investments.map(i=>i.name), '현금'];
+      const data = [
+        ...investments.map(i => (i.quantity/1000) * (i.currentPrice||0)),
+        cash
+      ];
+      if (donutChart) donutChart.destroy();
+      donutChart = new Chart($('#donut').getContext('2d'), {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data }] },
         options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          scales: {
-            y: {
-              beginAtZero: true,
-              title: { display: true, text: '₩ (백만, MM)' },
-              ticks: { callback: (v) => formatToMM(v) }
-            }
-          },
-          plugins: {
-            legend: { position: 'top' },
-            tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatToMM(ctx.parsed.y)}` } }
-          }
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: ctx => `${ctx.label}: ${toMM(ctx.parsed)}` } } }
         }
       });
     }
 
-    function renderAll() { renderHoldings(); renderChart(); }
-
-    // ====== FULLSCREEN ======
-    function enterFullscreen() {
-      try {
-        const el = document.documentElement;
-        if (el.requestFullscreen) el.requestFullscreen();
-        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-        else if (el.msRequestFullscreen) el.msRequestFullscreen();
-      } catch (e) {
-        showStatus('전체 화면 기능은 이 환경에서 지원되지 않습니다. 웹 서버(예: GitHub Pages)에서 열어 주세요.', true);
-        console.error(e);
-      }
+    function renderBars(){
+      const labels = investments.map(i=>i.name);
+      const values = investments.map(i => (i.quantity/1000) * ((i.currentPrice||0) - i.purchasePrice));
+      if (barsChart) barsChart.destroy();
+      barsChart = new Chart($('#bars').getContext('2d'), {
+        type: 'bar',
+        data: { labels, datasets: [{ label: '손익 (MM)', data: values }] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          scales: { y: { beginAtZero: true, ticks: { callback: v => toMM(v) } } },
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${toMM(c.parsed.y)}` } } }
+        }
+      });
     }
 
-    // ====== INIT ======
+    function renderLine(timeline){
+      const badge = $('#timeline-badge');
+      if (!timeline || timeline.size===0){
+        badge.textContent = '날짜 열을 찾지 못함';
+        if (lineChart) { lineChart.destroy(); lineChart = null; }
+        // 렌더링 대신 스켈레톤 표시
+        const ctx = $('#line').getContext('2d');
+        ctx.clearRect(0,0,ctx.canvas.width, ctx.canvas.height);
+        return;
+      }
+      badge.textContent = '날짜 데이터 감지됨';
+
+      // date asc
+      const dates = [...timeline.keys()].sort();
+      const totals = dates.map(d => {
+        let v = cash; // 현금 포함(고정)
+        const priceByCode = timeline.get(d);
+        for (const inv of investments){
+          const p = priceByCode.get(inv.fund_cd);
+          if (isFinite(p)) v += (inv.quantity/1000) * p;
+        }
+        return v;
+      });
+
+      if (lineChart) lineChart.destroy();
+      lineChart = new Chart($('#line').getContext('2d'), {
+        type: 'line',
+        data: { labels: dates, datasets: [{ label: '총 평가액', data: totals, tension: 0.25, fill: false }] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          scales: { y: { ticks: { callback: v => toMM(v) } } },
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${toMM(c.parsed.y)}` } } }
+        }
+      });
+    }
+
+    // ===================== INTERACTION =====================
+    function enterFullscreen(){
+      const el = document.documentElement;
+      if (el.requestFullscreen) el.requestFullscreen();
+      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+      else if (el.msRequestFullscreen) el.msRequestFullscreen();
+    }
+
+    function applyStoredTheme(){
+      const stored = localStorage.getItem('theme-mode');
+      if (stored === 'dark') document.documentElement.classList.add('dark');
+    }
+
+    function toggleTheme(){
+      const html = document.documentElement;
+      html.classList.toggle('dark');
+      localStorage.setItem('theme-mode', html.classList.contains('dark') ? 'dark' : 'light');
+    }
+
+    // ===================== INIT =====================
     window.addEventListener('load', () => {
-      document.getElementById('fullscreen-button').addEventListener('click', enterFullscreen);
-      fetchSheet(); // 최초 로드
-      // 주기적 새로고침
+      applyStoredTheme();
+      $('#refreshBtn').addEventListener('click', fetchSheet);
+      $('#toggleTheme').addEventListener('click', toggleTheme);
+      $('#fullscreen-button').addEventListener('click', enterFullscreen);
+      fetchSheet();
       setInterval(fetchSheet, REFRESH_MS);
     });
   </script>
